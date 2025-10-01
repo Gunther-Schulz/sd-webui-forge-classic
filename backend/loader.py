@@ -62,6 +62,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
         if cls_name in ["AutoencoderKLWan", "AutoencoderKLQwenImage"]:
+            # For Qwen models, VAE is loaded from huggingface directory, not from main model state dict
+            if cls_name == "AutoencoderKLQwenImage" and (state_dict is None or not isinstance(state_dict, dict) or len(state_dict) <= 16):
+                print("Loading Qwen VAE from huggingface directory...")
+                # Load from the huggingface directory instead
+                from diffusers import AutoencoderKL
+                model = AutoencoderKL.from_pretrained(config_path)
+                return model
+            
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
 
             config = WanVAE.load_config(config_path)
@@ -88,7 +96,72 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             return model
         if cls_name == "Qwen2_5_VLForConditionalGeneration":
-            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen 2.5 state dict!"
+            # For Qwen models, text encoder is loaded from separate FP8 file, not from main model state dict
+            if state_dict is None or not isinstance(state_dict, dict) or len(state_dict) <= 16:
+                print("Loading Qwen 2.5 text encoder from separate FP8 file...")
+                # Look for the FP8 text encoder file
+                import os
+                from safetensors import safe_open
+                
+                # Check common locations for the FP8 text encoder (using dynamic paths)
+                import backend.shared as shared
+                
+                # Get base directories dynamically
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                forge_root = os.path.dirname(os.path.dirname(current_dir))  # Go up from backend/
+                
+                # Try to get model paths from shared config if available
+                try:
+                    from modules.paths import models_path
+                    base_models_dir = models_path
+                except ImportError:
+                    # Fallback to relative paths from forge root
+                    base_models_dir = os.path.join(forge_root, "..", "models")
+                
+                filename = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+                possible_paths = [
+                    # Standard text encoder directories
+                    os.path.join(base_models_dir, "text_encoder", filename),
+                    os.path.join(forge_root, "models", "text_encoder", filename),
+                    # Stable diffusion model directory (alternative location)
+                    os.path.join(base_models_dir, "Stable-diffusion", filename),
+                    # Current directory relative paths
+                    os.path.join("models", "text_encoder", filename),
+                    os.path.join("..", "models", "text_encoder", filename),
+                ]
+                
+                # Normalize all paths to handle relative paths properly
+                possible_paths = [os.path.abspath(path) for path in possible_paths]
+                
+                text_encoder_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        text_encoder_path = path
+                        break
+                
+                if text_encoder_path:
+                    print(f"Found Qwen FP8 text encoder at: {text_encoder_path}")
+                    # Load the FP8 text encoder using the existing backend infrastructure
+                    from backend.nn.llm.llama import Qwen25_7BVLI
+                    config = read_arbitrary_config(config_path)
+                    
+                    with safe_open(text_encoder_path, framework="pt") as f:
+                        fp8_state_dict = {k: f.get_tensor(k) for k in f.keys()}
+                    
+                    storage_dtype = memory_management.text_encoder_dtype()
+                    state_dict_dtype = memory_management.state_dict_dtype(fp8_state_dict)
+                    
+                    if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
+                        print(f"Using Detected Qwen2.5 Data Type: {state_dict_dtype}")
+                        storage_dtype = state_dict_dtype
+                    
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
+                        model = Qwen25_7BVLI(config)
+                    
+                    load_state_dict(model, fp8_state_dict, log_name="Qwen2.5_FP8_TextEncoder")
+                    return model
+                else:
+                    raise FileNotFoundError("Qwen FP8 text encoder not found. Please download qwen_2.5_vl_7b_fp8_scaled.safetensors")
 
             from backend.nn.llm.llama import Qwen25_7BVLI
 

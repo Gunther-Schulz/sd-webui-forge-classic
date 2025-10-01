@@ -289,6 +289,9 @@ def unet_prefix_from_state_dict(state_dict):
     if counts[top] > 5:
         return top
     else:
+        # Check if this is a Qwen model (no prefix)
+        if "txt_norm.weight" in state_dict:
+            return ""
         return "model."  # etc.
 
 

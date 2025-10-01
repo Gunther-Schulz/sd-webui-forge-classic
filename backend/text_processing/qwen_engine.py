@@ -18,7 +18,9 @@ class QwenTextProcessingEngine:
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
 
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
+        # Handle case where opts might be None (e.g., during testing)
+        emphasis_option = getattr(opts, 'emphasis', 'Original') if opts is not None else 'Original'
+        self.emphasis = emphasis.get_current_option(emphasis_option)()
         self.max_length = 99999999
         self.min_length = 1
         self.id_pad = 151643
@@ -80,7 +82,9 @@ class QwenTextProcessingEngine:
         zs = []
         cache = {}
 
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
+        # Handle case where opts might be None (e.g., during testing)
+        emphasis_option = getattr(opts, 'emphasis', 'Original') if opts is not None else 'Original'
+        self.emphasis = emphasis.get_current_option(emphasis_option)()
 
         for line in texts:
             if line in cache:
