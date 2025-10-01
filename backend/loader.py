@@ -161,8 +161,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         print(f"Using Detected Qwen2.5 Data Type: {state_dict_dtype}")
                         storage_dtype = state_dict_dtype
                     
+                    # Use CPU for initial loading to avoid GPU memory issues
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
                         model = Qwen25_7BVLI(config)
+                        print(f"Qwen FP8 text encoder loaded on CPU with dtype: {storage_dtype}")
                     
                     load_state_dict(model, fp8_state_dict, log_name="Qwen2.5_FP8_TextEncoder")
                     return model
