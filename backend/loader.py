@@ -152,7 +152,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     config = read_arbitrary_config(config_path)
                     
                     with safe_open(text_encoder_path, framework="pt") as f:
-                        fp8_state_dict = {k: f.get_tensor(k) for k in f.keys()}
+                        # Load all keys except lm_head.weight which is not part of Qwen25_7BVLI architecture
+                        fp8_state_dict = {k: f.get_tensor(k) for k in f.keys() if not k.startswith('lm_head')}
                     
                     storage_dtype = memory_management.text_encoder_dtype()
                     state_dict_dtype = memory_management.state_dict_dtype(fp8_state_dict)
@@ -161,10 +162,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         print(f"Using Detected Qwen2.5 Data Type: {state_dict_dtype}")
                         storage_dtype = state_dict_dtype
                     
-                    # Use CPU for initial loading to avoid GPU memory issues
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
                         model = Qwen25_7BVLI(config)
-                        print(f"Qwen FP8 text encoder loaded on CPU with dtype: {storage_dtype}")
                     
                     load_state_dict(model, fp8_state_dict, log_name="Qwen2.5_FP8_TextEncoder")
                     return model
