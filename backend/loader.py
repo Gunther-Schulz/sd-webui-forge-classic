@@ -104,8 +104,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from safetensors import safe_open
                 
                 # Check common locations for the FP8 text encoder (using dynamic paths)
-                import backend.shared as shared
-                
                 # Get base directories dynamically
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 forge_root = os.path.dirname(os.path.dirname(current_dir))  # Go up from backend/
@@ -114,9 +112,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 try:
                     from modules.paths import models_path
                     base_models_dir = models_path
+                    print(f"Using models_path: {base_models_dir}")
                 except ImportError:
                     # Fallback to relative paths from forge root
                     base_models_dir = os.path.join(forge_root, "..", "models")
+                    print(f"Using fallback models dir: {base_models_dir}")
                 
                 filename = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
                 possible_paths = [
@@ -133,10 +133,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 # Normalize all paths to handle relative paths properly
                 possible_paths = [os.path.abspath(path) for path in possible_paths]
                 
+                print("Searching for Qwen FP8 text encoder in:")
+                for i, path in enumerate(possible_paths):
+                    exists = os.path.exists(path)
+                    print(f"  {i+1}. {path} -> {'EXISTS' if exists else 'NOT FOUND'}")
+                
                 text_encoder_path = None
                 for path in possible_paths:
                     if os.path.exists(path):
                         text_encoder_path = path
+                        print(f"✓ Found FP8 text encoder: {path}")
                         break
                 
                 if text_encoder_path:
