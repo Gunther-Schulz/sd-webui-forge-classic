@@ -35,6 +35,7 @@ dir_path = os.path.dirname(__file__)
 
 
 def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_path, state_dict):
+    import os
     config_path = os.path.join(repo_path, component_name)
 
     if component_name in ["feature_extractor", "safety_checker"]:
@@ -100,7 +101,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             if state_dict is None or not isinstance(state_dict, dict) or len(state_dict) <= 16:
                 print("Loading Qwen 2.5 text encoder from separate FP8 file...")
                 # Look for the FP8 text encoder file
-                import os
                 from safetensors import safe_open
                 
                 # Check common locations for the FP8 text encoder (using dynamic paths)
