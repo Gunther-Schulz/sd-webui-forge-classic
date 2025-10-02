@@ -318,7 +318,7 @@ def on_preset_change(preset: str):
     
     # Show sigma shift for Flow Match models (Qwen, Flux, Chroma)
     show_sigma_shift = preset in ("qwen", "flux", "chroma")
-    sigma_shift_default = 1.0  # Default for all models
+    sigma_shift_default = 1.15  # Default for Qwen (matches model_list.py)
 
     additional_modules = [os.path.basename(x) for x in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
 

@@ -136,7 +136,7 @@ class StableDiffusionProcessing:
     steps: int = 50
     cfg_scale: float = 7.0
     distilled_cfg_scale: float = 3.5
-    sigma_shift: float = 1.0
+    sigma_shift: float = 1.15
     width: int = 512
     height: int = 512
     restore_faces: bool = None
@@ -739,7 +739,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
         generation_params['Distilled CFG Scale'] = p.distilled_cfg_scale
     
     # Add sigma shift to generation params if not default
-    if p.sigma_shift != 1.0:
+    if abs(p.sigma_shift - 1.15) > 0.01:  # Save if not default (with small tolerance for float comparison)
         generation_params['Sigma Shift'] = p.sigma_shift
 
     noise_source_type = get_noise_source_type()
@@ -849,8 +849,6 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
 def apply_sigma_shift_to_scheduler(model, sigma_shift: float):
     """Apply sigma shift to Flow Match models (Qwen, Flux, Chroma)"""
-    if sigma_shift == 1.0:
-        return  # Skip if default value
     
     # Use predictor path (standard for Qwen/Flow models in this codebase)
     if hasattr(model, 'forge_objects') and hasattr(model.forge_objects, 'unet'):
@@ -858,8 +856,14 @@ def apply_sigma_shift_to_scheduler(model, sigma_shift: float):
         if hasattr(unet, 'model') and hasattr(unet.model, 'predictor'):
             predictor = unet.model.predictor
             if hasattr(predictor, 'set_parameters'):
-                print(f"Applying sigma shift via predictor: {sigma_shift}")
-                predictor.set_parameters(shift=sigma_shift)
+                # Preserve existing timesteps and multiplier to avoid overwriting with defaults
+                current_timesteps = getattr(predictor, 'timesteps', 1000)
+                if hasattr(current_timesteps, '__len__'):
+                    current_timesteps = len(current_timesteps)
+                current_multiplier = getattr(predictor, 'multiplier', 1000)
+                
+                print(f"Applying sigma shift via predictor: {sigma_shift} (timesteps={current_timesteps}, multiplier={current_multiplier})")
+                predictor.set_parameters(shift=sigma_shift, timesteps=current_timesteps, multiplier=current_multiplier)
                 return
     
     # Fallback: try scheduler path (for other possible architectures)
