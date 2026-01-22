@@ -113,8 +113,11 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
 
     online_mode = dynamic_args.get("online_lora", False)
 
-    if current_sd.forge_objects.unet.model.storage_dtype in [torch.float32, torch.float16, torch.bfloat16]:
-        online_mode = False
+    # Only force offline mode for standard dtypes if online_lora was not explicitly enabled
+    # This allows on-the-fly LoRA application even for standard dtypes when explicitly requested
+    if not dynamic_args.get("online_lora", False):
+        if current_sd.forge_objects.unet.model.storage_dtype in [torch.float32, torch.float16, torch.bfloat16]:
+            online_mode = False
 
     compiled_lora_targets = []
     for a, b, c in zip(networks_on_disk, unet_multipliers, te_multipliers):
@@ -137,6 +140,25 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
     for filename, strength_model, strength_clip, online_mode in compiled_lora_targets:
         lora_sd = load_lora_state_dict(filename)
         current_sd.forge_objects.unet, current_sd.forge_objects.clip = load_lora_for_models(current_sd.forge_objects.unet, current_sd.forge_objects.clip, lora_sd, strength_model, strength_clip, filename=filename, online_mode=online_mode)
+
+    # Refresh LoRAs to ensure they are properly applied (both online and offline modes)
+    # This is critical: refresh_loras() processes lora_patches and either:
+    # - Merges them into weights (offline mode) or
+    # - Stores them in forge_online_loras for on-the-fly application (online mode)
+    unet_has_loras = len(current_sd.forge_objects.unet.lora_patches) > 0
+    clip_has_loras = current_sd.forge_objects.clip is not None and hasattr(current_sd.forge_objects.clip, 'patcher') and len(current_sd.forge_objects.clip.patcher.lora_patches) > 0
+    
+    if unet_has_loras:
+        logger.info(f"[LORA] Refreshing UNet LoRAs: {len(current_sd.forge_objects.unet.lora_patches)} patch groups")
+        current_sd.forge_objects.unet.refresh_loras()
+        has_online = current_sd.forge_objects.unet.has_online_lora()
+        logger.info(f"[LORA] UNet LoRAs refreshed. Online mode: {has_online}")
+    
+    if clip_has_loras:
+        logger.info(f"[LORA] Refreshing CLIP LoRAs: {len(current_sd.forge_objects.clip.patcher.lora_patches)} patch groups")
+        current_sd.forge_objects.clip.patcher.refresh_loras()
+        has_online = current_sd.forge_objects.clip.patcher.has_online_lora()
+        logger.info(f"[LORA] CLIP LoRAs refreshed. Online mode: {has_online}")
 
     current_sd.forge_objects_after_applying_lora = current_sd.forge_objects.shallow_copy()
     return

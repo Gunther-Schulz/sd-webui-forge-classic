@@ -216,9 +216,11 @@ def model_lora_keys_unet(model, key_map={}):
                 key_lora = k[len("diffusion_model.") : -len(".weight")]
                 # Direct mapping for transformer_blocks format (QwenImage LoRA format)
                 key_map["{}".format(key_lora)] = k
-                # Support transformer prefix format
+                # Support transformer prefix format (LoRA files may use "transformer." prefix)
                 key_map["transformer.{}".format(key_lora)] = k
                 key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = k  # SimpleTuner lycoris format
+                # Also support LoRA keys without any prefix (direct transformer_blocks keys)
+                key_map["diffusion_model.{}".format(key_lora)] = k  # Ensure diffusion_model prefix works
 
     if "lumina" in _model_name or "z-image" in _model_name:
         diffusers_keys = z_image_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")

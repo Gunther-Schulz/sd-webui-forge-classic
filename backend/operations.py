@@ -485,6 +485,18 @@ class GGMLLayer:
 
         weight = self.get_weight(self.weight.to(device=device))
         weight = memory_management.cast_to(weight, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
+        
+        # Apply online LoRAs for GGUF models (same as ForgeOperations.cast_bias_weight)
+        loras: dict[str, list[torch.Tensor]] = getattr(self, "forge_online_loras", dict())
+        weight_patches = loras.get("weight", None)
+        bias_patches = loras.get("bias", None)
+        
+        if weight is not None and weight_patches is not None:
+            weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online weight lora", computation_dtype=weight.dtype)
+        
+        if bias is not None and bias_patches is not None:
+            bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online bias lora", computation_dtype=bias.dtype)
+        
         return weight, bias
 
 
